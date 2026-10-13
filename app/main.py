@@ -212,6 +212,7 @@ def bulk(p:Batch,req:Request):
   for rid,n,a in clean:c.execute("INSERT INTO bills(retailer_id,bill_number,due_paise,created_by) VALUES(?,?,?,?)",(rid,n,a,u["id"]))
   audit(c,u,"bulk_bills_added",f"count={len(clean)}");return {"ok":True,"created":len(clean),"total_due":rupees(sum(x[2] for x in clean))}
 
+
 @app.post("/api/retailers/{rid}/payments")
 async def payment(
     rid: int,
@@ -226,7 +227,6 @@ async def payment(
     if mode not in ("CASH", "UPI"):
         raise HTTPException(422, "Choose Cash or UPI.")
 
-    # Empty file input is allowed for both payment modes.
     has_proof = proof is not None and bool(proof.filename)
 
     if has_proof and mode != "UPI":
@@ -236,6 +236,7 @@ async def payment(
 
     proof_name = None
     data = None
+    uploaded = False
 
     if has_proof:
         if proof.content_type not in (
@@ -276,54 +277,71 @@ async def payment(
 
         proof_name = uuid.uuid4().hex + ext
 
-    with db_conn() as c:
-        u = user_for(req, c)
-        access(c, u, rid)
-        amount_paise = paise(amount)
+    try:
+        with db_conn() as c:
+            u = user_for(req, c)
+            access(c, u, rid)
+            amount_paise = paise(amount)
 
-        if amount_paise > balance(c, rid):
-            raise HTTPException(
-                422, "Payment exceeds outstanding balance."
+            if amount_paise > balance(c, rid):
+                raise HTTPException(
+                    422, "Payment exceeds outstanding balance."
+                )
+
+            if proof_name:
+                try:
+                    upload_proof(
+                        proof_name, data, proof.content_type
+                    )
+                    uploaded = True
+                except Exception:
+                    raise HTTPException(
+                        502,
+                        "Could not securely store the payment screenshot.",
+                    )
+
+            c.execute(
+                """
+                INSERT INTO payments(
+                    retailer_id, amount_paise, note, created_by,
+                    payment_mode, proof_filename, handover_status
+                )
+                VALUES(?,?,?,?,?,?, 'pending')
+                """,
+                (
+                    rid,
+                    amount_paise,
+                    note.strip(),
+                    u["id"],
+                    mode,
+                    proof_name,
+                ),
             )
 
-        c.execute(
-            """
-            INSERT INTO payments(
-                retailer_id, amount_paise, note, created_by,
-                payment_mode, proof_filename, handover_status
+            audit(
+                c,
+                u,
+                "payment_recorded",
+                f"retailer={rid};amount={rupees(amount_paise)};"
+                f"mode={mode};handover=pending",
             )
-            VALUES(?,?,?,?,?,?, 'pending')
-            """,
-            (
-                rid,
-                amount_paise,
-                note.strip(),
-                u["id"],
-                mode,
-                proof_name,
-            ),
-        )
 
-        if proof_name:
-             try:
-                 upload_proof(proof_name, data, proof.content_type)
-             except Exception:
-                 raise HTTPException(
-                     502, "Could not securely store the payment screenshot."
-                 )
-        audit(
-            c,
-            u,
-            "payment_recorded",
-            f"retailer={rid};amount={rupees(amount_paise)};"
-            f"mode={mode};handover=pending",
-        )
+            result = {
+                "ok": True,
+                "outstanding": rupees(balance(c, rid)),
+            }
 
-        return {
-            "ok": True,
-            "outstanding": rupees(balance(c, rid)),
-        }
+        # The database transaction has committed successfully here.
+        return result
 
+    except Exception:
+        if uploaded and proof_name:
+            try:
+                delete_proof(proof_name)
+            except Exception:
+                # Preserve the original error.
+                pass
+        raise
 @app.get("/api/admin/payment-handovers")
 def payment_handovers(req:Request):
  with db_conn() as c:
