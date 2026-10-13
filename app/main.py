@@ -11,7 +11,8 @@ from fastapi.responses import Response
 from app.storage import upload_proof, download_proof, delete_proof
 app=FastAPI(title="RMG ENTERPRISES Retailer Ledger")
 S = Path(__file__).parent / "static"
-app.mount("/static", StaticFiles(directory=S), name="static")@app.on_event("startup")
+app.mount("/static", StaticFiles(directory=S), name="static")
+@app.on_event("startup")
 def startup():init_db()
 def paise(v):
  try:a=Decimal(str(v)).quantize(Decimal(".01"),rounding=ROUND_HALF_UP)
