@@ -1,0 +1,19 @@
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+.env
+.env.*
+!.env.example
+
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploaded payment proofs and private files
+proofs/
+uploads/
