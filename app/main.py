@@ -76,7 +76,7 @@ def login(p: Login, req: Request):
             cookie_name,
             token(dict(u)),
             httponly=True,
-            secure=False,
+            secure=True,
             samesite="lax",
             max_age=43200
         )
