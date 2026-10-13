@@ -384,17 +384,63 @@ def confirm_handover(payment_id: int, req: Request):
             "confirmed_at": updated["handover_confirmed_at"],
         }
 
+
 @app.get("/api/payments/{payment_id}/proof")
-def payment_proof(payment_id:int,req:Request):
- from fastapi.responses import FileResponse
- with db_conn() as c:
-  u=user_for(req,c)
-  p=c.execute("SELECT p.proof_filename,p.created_by,r.agent_id FROM payments p JOIN retailers r ON r.id=p.retailer_id WHERE p.id=?",(payment_id,)).fetchone()
-  if not p or not p["proof_filename"]:raise HTTPException(404,"Payment proof not found.")
-  if u["role"]!="admin" and p["created_by"]!=u["id"] and p["agent_id"]!=u["id"]:raise HTTPException(403,"You cannot access this proof.")
-  path=PROOFS/p["proof_filename"]
-  if not path.is_file():raise HTTPException(404,"Payment proof file is missing.")
-  return FileResponse(path,media_type={".jpg":"image/jpeg",".png":"image/png",".webp":"image/webp"}.get(path.suffix,"application/octet-stream"),filename="payment-proof"+path.suffix)
+def payment_proof(payment_id: int, req: Request):
+    with db_conn() as c:
+        u = user_for(req, c)
+
+        p = c.execute(
+            """
+            SELECT p.proof_filename, p.created_by, r.agent_id
+            FROM payments p
+            JOIN retailers r ON r.id = p.retailer_id
+            WHERE p.id = ?
+            """,
+            (payment_id,),
+        ).fetchone()
+
+        if not p or not p["proof_filename"]:
+            raise HTTPException(404, "Payment proof not found.")
+
+        if (
+            u["role"] != "admin"
+            and p["created_by"] != u["id"]
+            and p["agent_id"] != u["id"]
+        ):
+            raise HTTPException(
+                403, "You cannot access this proof."
+            )
+
+        filename = p["proof_filename"]
+
+    try:
+        data = download_proof(filename)
+    except Exception:
+        raise HTTPException(
+            502, "Unable to retrieve the payment screenshot."
+        )
+
+    suffix = Path(filename).suffix.lower()
+    media_type = {
+        ".jpg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }.get(suffix)
+
+    if not media_type:
+        raise HTTPException(415, "Unsupported payment proof format.")
+
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'inline; filename="payment-proof{suffix}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+        },
+    )
+
 @app.get("/api/audit")
 def audit_list(req:Request):
  with db_conn() as c:
