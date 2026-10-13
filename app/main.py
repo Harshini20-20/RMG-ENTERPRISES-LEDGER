@@ -7,6 +7,8 @@ from pathlib import Path
 import uuid
 from app.db import init_db,db_conn
 from app.security import hash_pw,check_pw,token,user_for,role_for
+from fastapi.responses import Response
+from app.storage import upload_proof, download_proof, delete_proof
 app=FastAPI(title="RMG ENTERPRISES Retailer Ledger")
 S=Path(__file__).parent/"static"; PROOFS=Path(__file__).resolve().parent.parent/"data"/"payment_proofs"; PROOFS.mkdir(parents=True,exist_ok=True); app.mount("/static",StaticFiles(directory=S),name="static")
 @app.on_event("startup")
@@ -303,12 +305,12 @@ async def payment(
         )
 
         if proof_name:
-            try:
-                (PROOFS / proof_name).write_bytes(data)
-            except Exception:
-                (PROOFS / proof_name).unlink(missing_ok=True)
-                raise
-
+             try:
+                 upload_proof(proof_name, data, proof.content_type)
+             except Exception:
+                 raise HTTPException(
+                     502, "Could not securely store the payment screenshot."
+                 )
         audit(
             c,
             u,
