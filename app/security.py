@@ -1,7 +1,12 @@
 import os,hashlib,hmac,base64,json,time
 from fastapi import HTTPException,Request
-SECRET=os.environ.get("RMG_APP_SECRET","LOCAL-ONLY-CHANGE-ME-BEFORE-DEPLOYMENT")
-def hash_pw(p):
+SECRET = os.environ.get("RMG_APP_SECRET")
+
+if not SECRET or len(SECRET) < 32:
+    raise RuntimeError(
+        "Set RMG_APP_SECRET to a random secret of at least 32 characters."
+    )
+ def hash_pw(p):
  if len(p)<8: raise ValueError("Password must be at least 8 characters.")
  salt=os.urandom(16); d=hashlib.pbkdf2_hmac("sha256",p.encode(),salt,310000)
  return base64.urlsafe_b64encode(salt).decode()+"."+base64.urlsafe_b64encode(d).decode()
