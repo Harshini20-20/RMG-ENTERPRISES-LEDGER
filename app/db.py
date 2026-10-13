@@ -6,15 +6,18 @@ import psycopg
 from psycopg.rows import dict_row
 
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
-
 
 def _require_database_url():
-    if not DATABASE_URL:
+    url = os.environ.get("DATABASE_URL")
+
+    if not url:
         raise RuntimeError(
             "DATABASE_URL is not configured. "
             "Set it in your environment before starting the app."
         )
+
+    return url
+
 
 
 class DatabaseConnection:
@@ -31,10 +34,10 @@ class DatabaseConnection:
 
 @contextmanager
 def db_conn():
-    _require_database_url()
+    database_url = _require_database_url()
 
     with psycopg.connect(
-        DATABASE_URL,
+        database_url,
         row_factory=dict_row,
         connect_timeout=15,
         autocommit=False,
