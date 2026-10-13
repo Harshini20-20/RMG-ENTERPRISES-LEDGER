@@ -6,7 +6,6 @@ import psycopg
 from psycopg.rows import dict_row
 
 
-
 def _require_database_url():
     url = os.environ.get("DATABASE_URL")
 
