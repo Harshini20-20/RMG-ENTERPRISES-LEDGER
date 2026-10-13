@@ -110,21 +110,28 @@ def agents(req:Request):
  with db_conn() as c:
   role_for(req,c,"admin")
   return [dict(x) for x in c.execute("SELECT u.id,u.username,u.active,COUNT(r.id) retailer_count FROM users u LEFT JOIN retailers r ON r.agent_id=u.id AND r.active=1 WHERE u.role='agent' GROUP BY u.id ORDER BY u.username")]
-@app.post("/api/agents")
-def new_agent(p:Agent,req:Request):
 
-  try:
-   x = c.execute(
-    "INSERT INTO users(username,password_hash,role) "
-    "VALUES(?,?,'agent') RETURNING id",
-    (p.username.strip(), hash_pw(p.password))
-   ).fetchone()
-  except Exception as e:
-   if "UNIQUE" in str(e) or "unique" in str(e).lower():
-    raise HTTPException(409, "Username already exists.")
-   raise
-  audit(c, u, "agent_created", p.username)
-  return {"id": x["id"], "username": p.username}
+@app.post("/api/agents")
+def new_agent(p: Agent, req: Request):
+    with db_conn() as c:
+        u = role_for(req, c, "admin")
+
+        try:
+            x = c.execute(
+                """
+                INSERT INTO users (username, password_hash, role)
+                VALUES (?, ?, 'agent')
+                RETURNING id
+                """,
+                (p.username.strip(), hash_pw(p.password)),
+            ).fetchone()
+        except Exception as e:
+            if "UNIQUE" in str(e) or "unique" in str(e).lower():
+                raise HTTPException(409, "Username already exists.")
+            raise
+
+        audit(c, u, "agent_created", p.username)
+        return {"id": x["id"], "username": p.username}
 
 @app.patch("/api/agents/{aid}")
 def disable_agent(aid:int,req:Request):
@@ -138,16 +145,41 @@ def retailers(req:Request):
   u=user_for(req,c)
   rows=c.execute("SELECT * FROM retailers WHERE active=1 "+("AND agent_id=? " if u["role"]=="agent" else "")+"ORDER BY name",((u["id"],) if u["role"]=="agent" else ())).fetchall()
   return [retail(c,r) for r in rows]
-@app.post("/api/retailers")
-def new_retailer(p:Retailer,req:Request):
 
-  x = c.execute(
-   "INSERT INTO retailers(name,address,phone,agent_id) "
-   "VALUES(?,?,?,?) RETURNING id",
-   (p.name.strip(), p.address.strip(), p.phone.strip(), p.agent_id)
-  ).fetchone()
-  audit(c, u, "retailer_created", p.name)
-  return {"id": x["id"], "name": p.name}
+@app.post("/api/retailers")
+def new_retailer(p: Retailer, req: Request):
+    with db_conn() as c:
+        u = role_for(req, c, "admin")
+
+        if p.agent_id is not None:
+            agent = c.execute(
+                """
+                SELECT id FROM users
+                WHERE id = ? AND role = 'agent' AND active = 1
+                """,
+                (p.agent_id,),
+            ).fetchone()
+
+            if not agent:
+                raise HTTPException(422, "Choose an active agent.")
+
+        x = c.execute(
+            """
+            INSERT INTO retailers (name, address, phone, agent_id)
+            VALUES (?, ?, ?, ?)
+            RETURNING id
+            """,
+            (
+                p.name.strip(),
+                p.address.strip(),
+                p.phone.strip(),
+                p.agent_id,
+            ),
+        ).fetchone()
+
+        audit(c, u, "retailer_created", p.name)
+        return {"id": x["id"], "name": p.name}
+
 @app.patch("/api/retailers/{rid}/assignment")
 def assign(rid:int,req:Request,agent_id:int|None=None):
  with db_conn() as c:
@@ -299,36 +331,56 @@ def payment_handovers(req:Request):
    WHERE p.handover_status='pending' ORDER BY p.id DESC""").fetchall()
   return [{"id":x["id"],"retailer_id":x["retailer_id"],"retailer_name":x["retailer_name"],"amount":rupees(x["amount_paise"]),"note":x["note"],"created_at":x["created_at"],"payment_mode":x["payment_mode"],"proof_available":bool(x["proof_filename"]),"agent_username":x["agent_username"]} for x in rows]
 
+
 @app.post("/api/admin/payment-handovers/{payment_id}/confirm")
-def confirm_handover(payment_id:int,req:Request):
+def confirm_handover(payment_id: int, req: Request):
+    with db_conn() as c:
+        u = role_for(req, c, "admin")
 
-  x = c.execute(
-   """
-   UPDATE payments
-   SET handover_status='received',
-       handover_confirmed_by=?,
-       handover_confirmed_at=CURRENT_TIMESTAMP
-   WHERE id=? AND handover_status='pending'
-   RETURNING id, handover_confirmed_at
-   """,
-   (u["id"], payment_id)
-  ).fetchone()
+        p = c.execute(
+            """
+            SELECT id, retailer_id, amount_paise, handover_status
+            FROM payments
+            WHERE id = ?
+            """,
+            (payment_id,),
+        ).fetchone()
 
-  if not x:
-   raise HTTPException(409, "This handover was already confirmed.")
+        if not p:
+            raise HTTPException(404, "Payment not found.")
 
-  audit(
-   c, u, "payment_handover_confirmed",
-   f"payment={payment_id};retailer={p['retailer_id']};"
-   f"amount={rupees(p['amount_paise'])}"
-  )
+        if p["handover_status"] != "pending":
+            raise HTTPException(409, "This handover is no longer pending.")
 
-  return {
-   "ok": True,
-   "payment_id": payment_id,
-   "handover_status": "received",
-   "confirmed_at": x["handover_confirmed_at"]
-  }
+        updated = c.execute(
+            """
+            UPDATE payments
+            SET handover_status = 'received',
+                handover_confirmed_by = ?,
+                handover_confirmed_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND handover_status = 'pending'
+            RETURNING id, handover_confirmed_at
+            """,
+            (u["id"], payment_id),
+        ).fetchone()
+
+        if not updated:
+            raise HTTPException(409, "This handover was already confirmed.")
+
+        audit(
+            c,
+            u,
+            "payment_handover_confirmed",
+            f"payment={payment_id};retailer={p['retailer_id']};"
+            f"amount={rupees(p['amount_paise'])}",
+        )
+
+        return {
+            "ok": True,
+            "payment_id": payment_id,
+            "handover_status": "received",
+            "confirmed_at": updated["handover_confirmed_at"],
+        }
 
 @app.get("/api/payments/{payment_id}/proof")
 def payment_proof(payment_id:int,req:Request):
