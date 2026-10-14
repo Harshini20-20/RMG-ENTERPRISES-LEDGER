@@ -35,6 +35,7 @@ def access(c,u,r):
 class Login(BaseModel):username:str;password:str
 class Agent(BaseModel):username:str=Field(min_length=3,max_length=60);password:str=Field(min_length=8,max_length=128)
 class AgentPassword(BaseModel):password:str=Field(min_length=8,max_length=128)
+class AgentStatus(BaseModel):active:bool
 class Retailer(BaseModel):name:str=Field(min_length=1,max_length=160);address:str="";phone:str="";agent_id:int|None=None
 
 class Bill(BaseModel):
@@ -160,6 +161,18 @@ def change_agent_password(aid:int,p:AgentPassword,req:Request):
   audit(c,u,"agent_password_changed",x["username"])
   return {"ok":True}
 
+@app.patch("/api/agents/{aid}/status")
+def update_agent_status(aid: int, p: AgentStatus, req: Request):
+    with db_conn() as c:
+        admin = role_for(req, c, "admin")
+        agent = c.execute("SELECT id, username, role, active FROM users WHERE id=?", (aid,)).fetchone()
+        if not agent or agent["role"] != "agent":
+            raise HTTPException(404, "Agent not found.")
+        c.execute("UPDATE users SET active=? WHERE id=?", (p.active, aid))
+        action = "agent_reactivated" if p.active else "agent_deactivated"
+        audit(c, admin, action, agent["username"])
+        return {"ok": True, "id": aid, "active": p.active}
+
 @app.delete("/api/agents/{aid}")
 def remove_inactive_agent(aid:int,req:Request):
  with db_conn() as c:
@@ -180,6 +193,64 @@ def remove_inactive_agent(aid:int,req:Request):
   c.execute("DELETE FROM users WHERE id=?",(aid,))
   audit(c,u,"inactive_agent_removed",x["username"])
   return {"ok":True}
+@app.get("/api/agents/{aid}/profile")
+def agent_profile(aid: int, req: Request):
+    with db_conn() as c:
+        role_for(req, c, "admin")
+        agent = c.execute(
+            "SELECT id, username, active FROM users WHERE id=? AND role='agent'",
+            (aid,),
+        ).fetchone()
+        if not agent:
+            raise HTTPException(404, "Agent not found.")
+
+        assigned_rows = c.execute(
+            "SELECT * FROM retailers WHERE agent_id=? AND active=1 ORDER BY name",
+            (aid,),
+        ).fetchall()
+        assigned = [retail(c, r) for r in assigned_rows]
+        # Match the dashboard's outstanding calculation: do not count credit balances as negative debt.
+        outstanding_paise = sum(max(0, int(Decimal(r["outstanding"]) * 100)) for r in assigned)
+
+        payment_rows = c.execute(
+            """SELECT p.id, p.retailer_id, r.name AS retailer_name,
+                      p.amount_paise, p.note, p.created_at, p.payment_mode,
+                      p.handover_status, p.proof_filename,
+                      p.handover_confirmed_at, confirmer.username AS handover_confirmed_by
+               FROM payments p
+               JOIN retailers r ON r.id=p.retailer_id
+               LEFT JOIN users confirmer ON confirmer.id=p.handover_confirmed_by
+               WHERE p.created_by=?
+               ORDER BY p.id DESC""",
+            (aid,),
+        ).fetchall()
+        payments = [{
+            "id": row["id"],
+            "retailer_id": row["retailer_id"],
+            "retailer_name": row["retailer_name"],
+            "amount": rupees(row["amount_paise"]),
+            "note": row["note"],
+            "created_at": row["created_at"],
+            "payment_mode": row["payment_mode"],
+            "handover_status": row["handover_status"],
+            "proof_available": bool(row["proof_filename"]),
+            "handover_confirmed_at": row["handover_confirmed_at"],
+            "handover_confirmed_by": row["handover_confirmed_by"],
+        } for row in payment_rows]
+        pending = [p for p in payment_rows if p["handover_status"] == "pending"]
+        return {
+            "agent": {"id": agent["id"], "username": agent["username"], "active": bool(agent["active"])},
+            "summary": {
+                "retailer_count": len(assigned),
+                "outstanding": rupees(outstanding_paise),
+                "payment_count": len(payments),
+                "pending_handover_count": len(pending),
+                "pending_handover_amount": rupees(sum(int(p["amount_paise"]) for p in pending)),
+            },
+            "retailers": assigned,
+            "payments": payments,
+        }
+
 @app.get("/api/retailers")
 def retailers(req:Request):
  with db_conn() as c:
