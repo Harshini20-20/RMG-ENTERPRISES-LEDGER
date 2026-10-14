@@ -34,6 +34,7 @@ def access(c,u,r):
  return x
 class Login(BaseModel):username:str;password:str
 class Agent(BaseModel):username:str=Field(min_length=3,max_length=60);password:str=Field(min_length=8,max_length=128)
+class AgentPassword(BaseModel):password:str=Field(min_length=8,max_length=128)
 class Retailer(BaseModel):name:str=Field(min_length=1,max_length=160);address:str="";phone:str="";agent_id:int|None=None
 
 class Bill(BaseModel):
@@ -148,6 +149,37 @@ def disable_agent(aid:int,req:Request):
   u=role_for(req,c,"admin");x=c.execute("SELECT username,role FROM users WHERE id=?",(aid,)).fetchone()
   if not x or x["role"]!="agent":raise HTTPException(404,"Agent not found.")
   c.execute("UPDATE users SET active=0 WHERE id=?",(aid,));audit(c,u,"agent_deactivated",x["username"]);return {"ok":True}
+
+@app.put("/api/agents/{aid}/password")
+def change_agent_password(aid:int,p:AgentPassword,req:Request):
+ with db_conn() as c:
+  u=role_for(req,c,"admin")
+  x=c.execute("SELECT id,username,role FROM users WHERE id=?",(aid,)).fetchone()
+  if not x or x["role"]!="agent":raise HTTPException(404,"Agent not found.")
+  c.execute("UPDATE users SET password_hash=? WHERE id=?",(hash_pw(p.password),aid))
+  audit(c,u,"agent_password_changed",x["username"])
+  return {"ok":True}
+
+@app.delete("/api/agents/{aid}")
+def remove_inactive_agent(aid:int,req:Request):
+ with db_conn() as c:
+  u=role_for(req,c,"admin")
+  x=c.execute("SELECT id,username,role,active FROM users WHERE id=?",(aid,)).fetchone()
+  if not x or x["role"]!="agent":raise HTTPException(404,"Agent not found.")
+  if x["active"]:raise HTTPException(409,"Deactivate this agent before removing it.")
+  checks=[
+   ("retailers","agent_id","retailer assignments"),
+   ("bills","created_by","bill records"),
+   ("payments","created_by","payment records"),
+   ("payments","handover_confirmed_by","handover confirmation records"),
+   ("audit_log","actor_id","audit records"),
+  ]
+  for table,column,label in checks:
+   found=c.execute(f"SELECT 1 FROM {table} WHERE {column}=? LIMIT 1",(aid,)).fetchone()
+   if found:raise HTTPException(409,f"Cannot remove this agent because {label} depend on the account. Keep it inactive instead.")
+  c.execute("DELETE FROM users WHERE id=?",(aid,))
+  audit(c,u,"inactive_agent_removed",x["username"])
+  return {"ok":True}
 @app.get("/api/retailers")
 def retailers(req:Request):
  with db_conn() as c:
@@ -200,7 +232,7 @@ def assign(rid:int,req:Request,agent_id:int|None=None):
 def detail(rid:int,req:Request):
  with db_conn() as c:
   u=user_for(req,c);r=access(c,u,rid)
-  bills=[{"id":x["id"],"bill_number":x["bill_number"],"due_amount":rupees(x["due_paise"]),"created_at":x["created_at"]} for x in c.execute("SELECT * FROM bills WHERE retailer_id=? ORDER BY id DESC",(rid,))]
+  bills=[{"id":x["id"],"bill_number":x["bill_number"],"due_amount":rupees(x["due_paise"]),"bill_date":str(x["bill_date"]) if x["bill_date"] else None,"created_at":x["created_at"]} for x in c.execute("SELECT * FROM bills WHERE retailer_id=? ORDER BY id DESC",(rid,))]
   pays=[{"id":x["id"],"amount":rupees(x["amount_paise"]),"note":x["note"],"created_at":x["created_at"],"payment_mode":x["payment_mode"],"handover_status":x["handover_status"],"proof_available":bool(x["proof_filename"]),"handover_confirmed_at":x["handover_confirmed_at"],"handover_confirmed_by":x["handover_confirmed_by_username"]} for x in c.execute("SELECT p.*,u.username AS handover_confirmed_by_username FROM payments p LEFT JOIN users u ON u.id=p.handover_confirmed_by WHERE p.retailer_id=? ORDER BY p.id DESC",(rid,))]
   return {"retailer":retail(c,r),"bills":bills,"payments":pays}
 
@@ -237,12 +269,16 @@ def bulk(p: Batch, req: Request):
                     422, f"Bill {i}: invalid retailer."
                 )
 
+            bill_date = b.bill_date or date.today()
+            if bill_date > date.today():
+                raise HTTPException(422, f"Bill {i}: future bill dates are not allowed.")
+
             clean.append(
                 (
                     b.retailer_id,
                     n,
                     paise(b.due_amount),
-                    b.bill_date,
+                    bill_date,
                 )
             )
 
