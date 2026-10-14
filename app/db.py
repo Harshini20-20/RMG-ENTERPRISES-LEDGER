@@ -123,6 +123,25 @@ def init_db():
         ALTER TABLE payments
         ADD COLUMN IF NOT EXISTS handover_confirmed_at TIMESTAMPTZ
         """,
+        
+        """
+        ALTER TABLE bills
+        ADD COLUMN IF NOT EXISTS bill_date DATE
+        """,
+        """
+        UPDATE bills
+        SET bill_date = created_at::date
+        WHERE bill_date IS NULL
+        """,
+        """
+        ALTER TABLE bills
+        ALTER COLUMN bill_date SET DEFAULT CURRENT_DATE
+        """,
+        """
+        ALTER TABLE bills
+        ALTER COLUMN bill_date SET NOT NULL
+        """,
+
     ]
 
     with db_conn() as connection:
