@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel,Field
 from decimal import Decimal,InvalidOperation,ROUND_HALF_UP
 from pathlib import Path
+from datetime import date
 import uuid
 from app.db import init_db,db_conn
 from app.security import hash_pw,check_pw,token,user_for,role_for
@@ -34,7 +35,12 @@ def access(c,u,r):
 class Login(BaseModel):username:str;password:str
 class Agent(BaseModel):username:str=Field(min_length=3,max_length=60);password:str=Field(min_length=8,max_length=128)
 class Retailer(BaseModel):name:str=Field(min_length=1,max_length=160);address:str="";phone:str="";agent_id:int|None=None
-class Bill(BaseModel):retailer_id:int;bill_number:str=Field(min_length=1,max_length=100);due_amount:Decimal
+
+class Bill(BaseModel):
+    retailer_id: int
+    bill_number: str = Field(min_length=1, max_length=100)
+    due_amount: Decimal
+    bill_date: date | None = None
 class Batch(BaseModel):bills:list[Bill]=Field(min_length=1,max_length=250)
 class Payment(BaseModel):amount:Decimal;note:str=""
 @app.get("/")
@@ -197,21 +203,86 @@ def detail(rid:int,req:Request):
   bills=[{"id":x["id"],"bill_number":x["bill_number"],"due_amount":rupees(x["due_paise"]),"created_at":x["created_at"]} for x in c.execute("SELECT * FROM bills WHERE retailer_id=? ORDER BY id DESC",(rid,))]
   pays=[{"id":x["id"],"amount":rupees(x["amount_paise"]),"note":x["note"],"created_at":x["created_at"],"payment_mode":x["payment_mode"],"handover_status":x["handover_status"],"proof_available":bool(x["proof_filename"]),"handover_confirmed_at":x["handover_confirmed_at"],"handover_confirmed_by":x["handover_confirmed_by_username"]} for x in c.execute("SELECT p.*,u.username AS handover_confirmed_by_username FROM payments p LEFT JOIN users u ON u.id=p.handover_confirmed_by WHERE p.retailer_id=? ORDER BY p.id DESC",(rid,))]
   return {"retailer":retail(c,r),"bills":bills,"payments":pays}
+
 @app.post("/api/bills/bulk")
-def bulk(p:Batch,req:Request):
- with db_conn() as c:
-  u=role_for(req,c,"admin");clean=[];seen=set()
-  for i,b in enumerate(p.bills,1):
-   n=b.bill_number.strip();key=(b.retailer_id,n.casefold())
-   if not n:raise HTTPException(422,f"Bill {i}: number required.")
-   if key in seen:raise HTTPException(409,f"Bill {i}: duplicate within batch.")
-   seen.add(key)
-   if not c.execute("SELECT id FROM retailers WHERE id=? AND active=1",(b.retailer_id,)).fetchone():raise HTTPException(422,f"Bill {i}: invalid retailer.")
-   clean.append((b.retailer_id,n,paise(b.due_amount)))
-  for rid,n,_ in clean:
-   if c.execute("SELECT id FROM bills WHERE retailer_id=? AND lower(bill_number)=lower(?)",(rid,n)).fetchone():raise HTTPException(409,f"Bill {n} already exists for that retailer.")
-  for rid,n,a in clean:c.execute("INSERT INTO bills(retailer_id,bill_number,due_paise,created_by) VALUES(?,?,?,?)",(rid,n,a,u["id"]))
-  audit(c,u,"bulk_bills_added",f"count={len(clean)}");return {"ok":True,"created":len(clean),"total_due":rupees(sum(x[2] for x in clean))}
+def bulk(p: Batch, req: Request):
+    with db_conn() as c:
+        u = role_for(req, c, "admin")
+        clean = []
+        seen = set()
+
+        for i, b in enumerate(p.bills, 1):
+            n = b.bill_number.strip()
+            key = (b.retailer_id, n.casefold())
+
+            if not n:
+                raise HTTPException(
+                    422, f"Bill {i}: number required."
+                )
+
+            if key in seen:
+                raise HTTPException(
+                    409, f"Bill {i}: duplicate within batch."
+                )
+
+            seen.add(key)
+
+            retailer = c.execute(
+                "SELECT id FROM retailers WHERE id=? AND active=1",
+                (b.retailer_id,),
+            ).fetchone()
+
+            if not retailer:
+                raise HTTPException(
+                    422, f"Bill {i}: invalid retailer."
+                )
+
+            clean.append(
+                (
+                    b.retailer_id,
+                    n,
+                    paise(b.due_amount),
+                    b.bill_date,
+                )
+            )
+
+        for rid, n, _, _ in clean:
+            if c.execute(
+                """
+                SELECT id FROM bills
+                WHERE retailer_id=? AND lower(bill_number)=lower(?)
+                """,
+                (rid, n),
+            ).fetchone():
+                raise HTTPException(
+                    409,
+                    f"Bill {n} already exists for that retailer.",
+                )
+
+        for rid, n, amount, bill_date in clean:
+            c.execute(
+                """
+                INSERT INTO bills(
+                    retailer_id, bill_number, due_paise,
+                    created_by, bill_date
+                )
+                VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_DATE))
+                """,
+                (rid, n, amount, u["id"], bill_date),
+            )
+
+        audit(
+            c,
+            u,
+            "bulk_bills_added",
+            f"count={len(clean)}",
+        )
+
+        return {
+            "ok": True,
+            "created": len(clean),
+            "total_due": rupees(sum(x[2] for x in clean)),
+        }
 
 
 @app.post("/api/retailers/{rid}/payments")
