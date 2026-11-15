@@ -1,270 +1,141 @@
-# RMG ENTERPRISES — Retailer Ledger Management System
-
-**A Client-Oriented Digital Ledger and Payment Management Platform**
+# RMG Enterprises — Retailer Ledger
 
 <p align="center">
-  <a href="https://www.python.org/">
-    <img src="https://img.shields.io/badge/Python-3.12-blue?logo=python" />
-  </a>
-  <a href="https://fastapi.tiangolo.com/">
-    <img src="https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi" />
-  </a>
-  <a href="https://render.com/">
-    <img src="https://img.shields.io/badge/Deployment-Render-purple?logo=render" />
-  </a>
-  <a href="https://supabase.com/">
-    <img src="https://img.shields.io/badge/Database-Supabase-green?logo=supabase" />
-  </a>
+  **A web-based retailer ledger and payment management system**
+  
+  [Live Application](https://rmg-enterprises-ledger.onrender.com/) · [Admin Login](https://rmg-enterprises-ledger.onrender.com/admin/login) · [GitHub Repository](https://github.com/Harshini20-20/RMG-ENTERPRISES-LEDGER)
 </p>
 
-## 🌐 Live Application
+## Overview
 
-- **[Launch RMG Enterprises Ledger](https://rmg-enterprises-ledger.onrender.com/)**
-- **[Admin Login](https://rmg-enterprises-ledger.onrender.com/admin/login)**
-- **[Agent Login](https://rmg-enterprises-ledger.onrender.com/agent/login)**
-- **[GitHub Repository](https://github.com/Harshini20-20/RMG-ENTERPRISES-LEDGER)**
+RMG Enterprises Retailer Ledger is a web-based application designed to simplify retailer billing, payment tracking, and field-agent operations.
 
-> **Deployment Notice:** The application is currently undergoing database connectivity recovery. Live access may be temporarily unavailable.
+The system provides a centralized platform for managing retailer transactions, recording payments, monitoring collections, and maintaining an auditable transaction history.
 
----
+## Problem Statement
 
-## 📌 Project Overview
+Managing retailer bills and payments manually can lead to inconsistent records, duplicate entries, delayed reconciliation, and difficulty tracking collections across field agents.
 
-RMG Enterprises Retailer Ledger is a web-based business management application developed to digitize retailer transactions, payment collections and agent operations.
+This application digitizes these workflows through a centralized ledger with role-based access and transaction tracking.
 
-The system provides separate administrative and agent interfaces, allowing administrators to manage agents and retailer assignments while agents can record bills, collect payments and maintain retailer transaction records.
+## Key Features
 
-The application aims to reduce manual bookkeeping, improve transaction visibility and maintain structured financial records.
+### Admin Management
+- Separate administrator login.
+- Manage field agents.
+- Assign and reassign retailers to agents.
+- Monitor retailer transactions and payment collections.
+- Track payment handovers.
 
-## 🎯 Problem Statement
+### Agent Operations
+- Dedicated agent access.
+- View assigned retailers.
+- Enter retailer bills in bulk.
+- Record payments through Cash or UPI.
+- View retailer transaction history.
 
-Traditional retailer ledger management involves manual bill entries, payment tracking and coordination between field agents and administrators.
+### Payment Tracking
+- Record and track payment transactions.
+- Maintain payment handover records.
+- Support optional UPI payment proof uploads.
+- Access uploaded proofs through authenticated routes.
 
-These processes can result in duplicate entries, inaccurate balances, delayed payment reconciliation and limited visibility into agent collections.
+### Data Integrity and Security
+- Duplicate bill protection.
+- Authentication and role-based access.
+- Audit event tracking.
+- Centralized transaction records.
 
-RMG Ledger addresses these challenges through a centralized digital platform with role-based access and structured transaction management.
+## Application Workflow
 
-## ✨ Key Features
+1. Admin creates and manages agent accounts.
+2. Retailers are assigned to field agents.
+3. Agents enter retailer bills and record payments.
+4. Payment handovers are tracked.
+5. Admin monitors transactions and collection activity.
+6. Audit records help maintain transaction accountability.
 
-### 1. Authentication and Access Management
-- Separate Admin and Agent login interfaces.
-- Role-specific application access.
-- Centralized user and agent management.
+## Technology Stack
 
-### 2. Agent Management
-- Create and manage agents.
-- Assign retailers to agents.
-- Reassign retailers when required.
-
-### 3. Retailer Ledger Management
-- Maintain retailer transaction histories.
-- Record bills through bulk manual entry.
-- Track outstanding balances.
-- Prevent duplicate bill entries.
-
-### 4. Payment Management
-- Record retailer payment collections.
-- Support Cash and UPI payment modes.
-- Maintain payment transaction records.
-- Optional UPI payment proof uploads.
-
-### 5. Payment Handover Tracking
-- Track collections recorded by agents.
-- Display pending handovers to administrators.
-- Allow administrators to confirm receipt of collected money.
-- Maintain separate collection and handover records.
-
-### 6. Audit and Transaction Tracking
-- Maintain audit events for important operations.
-- Preserve historical payment records.
-- Provide authenticated access to payment proof files.
-
-## 🔄 Application Workflow
-
-```text
-             Admin Login
-                  |
-                  v
-          Admin Dashboard
-                  |
-          Manage Agents
-                  |
-          Assign Retailers
-                  |
-                  v
-             Agent Login
-                  |
-                  v
-          Retailer Selection
-                  |
-                  v
-             Record Bills
-                  |
-                  v
-          Record Collections
-                  |
-             Cash / UPI
-                  |
-                  v
-          Pending Handovers
-                  |
-                  v
-          Admin Confirmation
-                  |
-                  v
-         Updated Ledger Records
-```
-
-## 🛠️ Technology Stack
-
-| Component | Technology |
+| Layer | Technology |
 |---|---|
-| Backend | [Python](https://www.python.org/), [FastAPI](https://fastapi.tiangolo.com/) |
+| Backend | Python, FastAPI |
 | Frontend | HTML, CSS, JavaScript |
-| Local Database | [SQLite](https://www.sqlite.org/) |
-| Cloud Database | [PostgreSQL](https://www.postgresql.org/) |
-| Database Platform | [Supabase](https://supabase.com/) |
-| Database Connectivity | [SQLAlchemy](https://www.sqlalchemy.org/) |
-| ASGI Server | [Uvicorn](https://www.uvicorn.org/) |
-| Cloud Hosting | [Render](https://render.com/) |
-| Version Control | [Git](https://git-scm.com/), [GitHub](https://github.com/) |
+| Database | SQLite / PostgreSQL |
+| ORM | SQLAlchemy |
+| Database Hosting | Supabase |
+| Application Hosting | Render |
+| Server | Uvicorn |
 
-## 🏗️ Project Structure
+## Architecture
 
-```text
-RMG-ENTERPRISES-LEDGER/
-│
-├── app/
-│   ├── main.py
-│   └── create_admin.py
-│
-├── data/
-│   ├── retailer_ledger.db
-│   └── payment_proofs/
-│
-├── requirements.txt
-├── .gitignore
-└── README.md
-```
+The application follows a web-based client-server architecture.
 
-## ⚙️ Installation and Setup
+- **Frontend:** Provides interfaces for administrators and field agents.
+- **Backend:** FastAPI handles authentication, business logic, retailer operations, and transactions.
+- **Database:** SQLAlchemy manages database interactions with SQLite or PostgreSQL.
+- **Storage:** Supabase supports hosted database and file-storage functionality.
+- **Deployment:** Render hosts the web application.
 
-### Prerequisites
-- Python 3.12
-- Git
-- pip
+## Live Application
 
-### 1. Clone the Repository
+The application is deployed on Render.
+
+- [Open RMG Enterprises](https://rmg-enterprises-ledger.onrender.com/)
+- [Admin Login](https://rmg-enterprises-ledger.onrender.com/admin/login)
+
+*Note: The hosted application may take a little time to respond after periods of inactivity.*
+
+## Local Setup
+
+Clone the repository:
 
 ```bash
 git clone https://github.com/Harshini20-20/RMG-ENTERPRISES-LEDGER.git
-
 cd RMG-ENTERPRISES-LEDGER
 ```
 
-### 2. Create a Virtual Environment
+Create and activate a virtual environment:
 
 ```bash
-py -3.12 -m venv .venv
+python -m venv .venv
 ```
 
-### 3. Activate the Environment
-
-Windows PowerShell:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-### 4. Install Dependencies
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 5. Create an Administrator Account
+Configure the required environment variables using your local environment configuration. Do not commit credentials or secret keys.
 
-```bash
-python -m app.create_admin
-```
+Run the application using the project's configured entry point.
 
-Follow the prompts to configure administrator credentials.
+## Engineering Highlights
 
-### 6. Start the Application
+- Implemented role-based workflows for administrators and field agents.
+- Developed retailer billing and payment-recording functionality.
+- Added duplicate transaction protection.
+- Implemented payment handover tracking.
+- Incorporated audit events for improved accountability.
+- Integrated database-backed application workflows.
 
-```bash
-uvicorn app.main:app --reload
-```
+## Future Enhancements
 
-### 7. Access the Application
+- Advanced collection analytics and dashboards.
+- Automated payment reconciliation.
+- Exportable retailer statements.
+- Improved reporting and financial summaries.
+- Enhanced mobile experience for field agents.
 
-| Interface | Local URL |
-|---|---|
-| Admin Login | http://127.0.0.1:8000/admin/login |
-| Agent Login | http://127.0.0.1:8000/agent/login |
-| API Documentation | http://127.0.0.1:8000/docs |
-
-## 🔐 Security and Configuration
-
-The application uses environment-based configuration for sensitive settings.
-
-Important configuration variables include:
-
-- `RMG_APP_SECRET`
-- `DATABASE_URL`
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `SUPABASE_STORAGE_BUCKET`
-
-Security practices:
-- Keep credentials outside source control.
-- Use HTTPS for public deployments.
-- Restrict access to payment proof files.
-- Use secure authentication and session configuration.
-- Maintain regular database backups.
-
-Never commit `.env` files, database credentials, payment proofs or client information to GitHub.
-
-## 🚀 Deployment
-
-The application is deployed using:
-
-- **Application Hosting:** [Render](https://render.com/)
-- **Cloud Database:** [Supabase](https://supabase.com/)
-- **Source Code Management:** [GitHub](https://github.com/)
-
-The deployment uses environment variables to configure database connectivity and application secrets.
-
-## 📚 Engineering Highlights
-
-- Designed separate workflows for administrators and field agents.
-- Implemented retailer assignment and reassignment functionality.
-- Added duplicate bill protection.
-- Designed payment collection and handover tracking.
-- Maintained historical payment records.
-- Implemented authenticated payment-proof access.
-- Developed a centralized retailer ledger management workflow.
-
-## 🔮 Future Improvements
-
-- Automated bill generation and PDF receipts.
-- Advanced financial reporting and analytics.
-- Improved transaction reconciliation.
-- Automated database backup and recovery.
-- Enhanced mobile responsiveness.
-- Real-time operational dashboards.
-
-## 👩‍💻 Developer
+## Author
 
 **Harshini G**
 
-Artificial Intelligence and Data Science Undergraduate
-
-- **[GitHub Profile](https://github.com/Harshini20-20)**
-- **[Project Repository](https://github.com/Harshini20-20/RMG-ENTERPRISES-LEDGER)**
+[GitHub Profile](https://github.com/Harshini20-20)
 
 ---
 
 <p align="center">
-  Developed for RMG Enterprises.
+  Built to digitize retailer ledger operations and simplify payment management.
 </p>
