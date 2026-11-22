@@ -7,7 +7,7 @@ from psycopg.rows import dict_row
 
 
 def _require_database_url():
-    url = os.environ.get("DATABASE_URL")
+    url = os.environ.get("TEST_DATABASE_URL") or os.environ.get("DATABASE_URL")
 
     if not url:
         raise RuntimeError(
